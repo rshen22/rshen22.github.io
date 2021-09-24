@@ -77,7 +77,6 @@ Type <- "Gas"
 PGE_Gas <- NULL
 
 for (Year in Years) {
-  
   for (Quarter in Quarters) {
   
     Filename <- 
@@ -119,10 +118,8 @@ rm(Temp)
 
 
 ```{r}
-
 names(PGE_Elec)[7] <- "TOTAL_KWH/THM"
 names(PGE_Elec)[8] <- "AVERAGE_KWH/THM"
-
 
 names(PGE_Gas)[7] <- "TOTAL_KWH/THM"
 names(PGE_Gas)[8] <- "AVERAGE_KWH/THM"
@@ -162,6 +159,18 @@ newPlotOne = ggplot(data = ResidentialData) + geom_bar(aes(x = MONTH, y = TOTAL_
   )
 
 newPlotOne
+
+# Residential COVID Plot
+COVIDResidential = subset(ResidentialData, ResidentialData$YEAR == "2019" | ResidentialData$YEAR == "2020" | ResidentialData$YEAR == "2021")
+
+newPlotOneCOVID = ggplot(data = COVIDResidential) + geom_bar(aes(x = MONTH, y = TOTAL_kBTUs, fill = CUSTOMERCLASS), stat = "identity", position = "stack") + labs(
+    x = "Month",
+    y = "kBTUs",
+    title = "PG&E Residential Data 2019-2020 + 2021 Q1 and Q2",
+    fill = "Electricity or Gas"
+  )
+
+newPlotOneCOVID
 ```
 
 
@@ -177,11 +186,24 @@ newPlotTwo = ggplot(data = CommercialData) + geom_bar(aes(x = MONTH, y = TOTAL_k
   )
 
 newPlotTwo
+
+COVIDCommercial = subset(CommercialData, CommercialData$YEAR == "2019" | CommercialData$YEAR == "2020" | CommercialData$YEAR == "2021")
+
+newPlotTwoCOVID = ggplot(data = COVIDCommercial) + geom_bar(aes(x = MONTH, y = TOTAL_kBTUs, fill = CUSTOMERCLASS), stat = "identity", position = "stack") + labs(
+    x = "Month",
+    y = "kBTUs",
+    title = "PG&E Commercial Data 2019-2020 + 2021 Q1 and Q2",
+    fill = "Electricity or Gas"
+  )
+
+newPlotTwoCOVID
 ```
-### COVID Pandemic 2019 - 2020 Analysis
 
-Note, make some plots here.
-
+### Summarizing Results & COVID Pandemic 2019 - 2021 Analysis
 
 
-Comment on any observable changes in energy consumption that may be attributable to the COVID-19 pandemic (you are encouraged to create additional plots that help emphasize the change between 2019 and 2020). Explain any key assumptions you made in the analysis, or caveats about the data sources that you think the reader should be aware of. Publish all of this work in a GitHub webpage titled “yourname_A1” (using the steps from Chapter 1.4). For this assignment, a support script is available by request from the TAs.
+For both the Residential and Commercial Data between 2019 and 2021, it appears that the kBTU usages for Electricity and Gas are relatively lower across all months, give or take, in comparison to the Residential and Commercial Data between 2017 - 2021. To see this, in comparing the Residential and Commercial Data between 2019 and 2021 and 2017 and 2021, the range of the kBTU on the Y - Axis has shrunk. Ultimately, this suggests that more energy was used between 2017 and 2019. This makes sense, as because of the long-lasting impacts of COVID-19, many of the Residences and Commercial Institutions will have lost money/resources to pay for electricity and gas, so they may be more stingy and less willing to spend. 
+
+
+In terms of the key assumptions made in the analysis and/or caveats we should be aware of, note that the website (\url{https://pge-energydatarequest.com/}) states that the data contains "a minimum of 100 Residential Customers, a minimum of 15 Non-Residential Customers, with no single Non-Residential Customer in each sector accounting for more than $15\%$ of the total consumption. If the aggregation standard is not met, the consumption will be combined with a neighboring ZIP code until the aggregation requirements are met." Thus, it assumes that the if the aggregation standard is not met, the consumption combined with the neighboring ZIP code will have a negligible impact on drawing conclusions from the data. Moreover, we also assume that the data is well-representative of the population, and that the information is accurate, as the KWhs and Therms are accurately measured.
+
