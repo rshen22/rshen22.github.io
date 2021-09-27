@@ -13,13 +13,13 @@ knitr::opts_chunk$set(echo = F)
 opts_chunk$set(tidy.opts = list(width.cutoff = 40), tidy=TRUE)
 ```
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 # Load Packages
 library(tidyverse)
 library(ggplot2)
 ```
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 ### Get Electricity Together
 
 Years <- 2017:2020
@@ -68,7 +68,7 @@ for (Quarter in Quarters) {
 PGE_Elec = data.frame(PGE_Elec)
 ```
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 # Get Gas Together
 
 Years <- 2017:2020
@@ -118,7 +118,7 @@ rm(Temp)
 ```
 
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 names(PGE_Elec)[7] <- "TOTAL_KWH/THM"
 names(PGE_Elec)[8] <- "AVERAGE_KWH/THM"
 
@@ -129,7 +129,7 @@ finalData = rbind(PGE_Elec, PGE_Gas)
 ```
 
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 
 finalData = na.omit(finalData)
 for (i in 1:nrow(finalData)) {
@@ -153,14 +153,14 @@ for (i in 1:nrow(finalData)) {
 ```
 
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 ResidentialData = subset(finalData, finalData$CUSTOMERCLASS == "Elec- Residential" | finalData$CUSTOMERCLASS == "Gas- Residential")
 
 CommercialData = subset(finalData, finalData$CUSTOMERCLASS == "Elec- Commercial" | finalData$CUSTOMERCLASS == "Gas- Commercial")
 ```
 
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 # Residential
 
 newPlotOne = ggplot(data = ResidentialData) + geom_bar(aes(x = Date, y = TOTAL_kBTUs, fill = CUSTOMERCLASS), stat = "identity", position = "stack") + labs(
@@ -189,7 +189,7 @@ newPlotOneCOVID
 
 
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 # Commercial
 
 newPlotTwo = ggplot(data = CommercialData) + geom_bar(aes(x = Date, y = TOTAL_kBTUs, fill = CUSTOMERCLASS), stat = "identity", position = "stack") + labs(
