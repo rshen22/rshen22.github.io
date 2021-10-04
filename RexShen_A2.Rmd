@@ -8,7 +8,7 @@ output: html_document
 ```{r setup, include = FALSE}
 library(knitr)
 knitr::opts_chunk$set(echo = F)
-opts_chunk$set(tidy.opts = list(width.cutoff = 40), tidy=TRUE)
+opts_chunk$set(tidy.opts = list(width.cutoff = 40), tidy = TRUE)
 ```
 
 
@@ -58,7 +58,7 @@ smc_pop_2010 =
     vintage = 2010,
     region = "block:*", 
     regionin = "state:06+county:081",
-    vars = c("P001001", "NAME", "BLKGRP") # Total Population P1_001N
+    vars = c("P001001", "NAME", "BLKGRP") # Total Population P001001
   ) %>%
   mutate(
     cbg =
