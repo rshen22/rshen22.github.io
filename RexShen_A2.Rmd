@@ -3,131 +3,129 @@ title: "Assignment 2"
 author: "Rex Shen"
 date: "9/28/2021"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include = FALSE}
 library(knitr)
-knitr::opts_chunk$set(echo = F)
+knitr::opts_chunk$set(echo = F, message = FALSE, warning = FALSE)
 opts_chunk$set(tidy.opts = list(width.cutoff = 40), tidy = TRUE)
 ```
 
 
-```{r, message = FALSE, warning = FALSE}
+```{r, message = FALSE, warning = FALSE, include = FALSE}
 # Load Packages #
 library(tidyverse)
 library(sf)
-library(tigris)
-library(mapview)
 library(leaflet)
 library(censusapi)
+library(mapview)
 ```
 
 
-```{r}
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+library(devtools)
+install_github('walkerke/tigris', force = TRUE)
+library(tigris)
+```
+
+
+```{r, message = FALSE, warning = FALSE, include = FALSE}
 # Set up System
 Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
 ```
-
 
 ```{r, message = FALSE, warning = FALSE}
 # State 6 is California
 # County 81 is San Mateo County
 
-smc_pop_2020 =
+Smc_Pop_2020 <-
   getCensus(
     name = "dec/pl",
     vintage = 2020,
     region = "block:*", 
     regionin = "state:06+county:081",
-    vars = c("P1_001N", "NAME") # Total Population P1_001N
+    vars = "P1_001N"
+  ) %>% 
+  transmute(
+    Block =
+      paste0(state,county,tract,block),
+    Pop = P1_001N
   )
 
-smc_pop_2020$BLKGRP = substr(smc_pop_2020$NAME, 25, 25)
-
-smc_pop_2020 = smc_pop_2020 %>% mutate(cbg =
-      paste0(state,county, tract, BLKGRP)
-  ) %>%
-  select(!c(state, county, tract, block, NAME, BLKGRP))
-
-smc_pop_2020 = data.frame(smc_pop_2020)
-names(smc_pop_2020)[1] = "Population"
-
-smc_pop_2010 = 
+Smc_Pop_2010 <-
   getCensus(
     name = "dec/pl",
     vintage = 2010,
     region = "block:*", 
     regionin = "state:06+county:081",
-    vars = c("P001001", "NAME", "BLKGRP") # Total Population P001001
-  ) %>%
-  mutate(
-    cbg =
-      paste0(state, county, tract, BLKGRP)
+    vars = "P001001"
   ) %>% 
-  select(!c(state, county, tract, block, NAME, BLKGRP))
-
-smc_pop_2010 = data.frame(smc_pop_2010)
-names(smc_pop_2010)[1] = "Population"
-
-####
-
-smc_pop = smc_pop_2020 %>% left_join(
-    smc_pop_2010,
-    by = "cbg"
+  transmute(
+    Block =
+      paste0(state, county,tract,block),
+    Pop = P001001
   )
 
-names(smc_pop)[1] = "2010Population"
-names(smc_pop)[3] = "2020Population"
 
-Column_Order = c("cbg", "2010Population", "2020Population")
-smc_pop = smc_pop[, Column_Order]
-smc_pop = smc_pop %>% filter(!is.na(`2020Population`))
-smc_pop = smc_pop %>% mutate(Absolute_Change = (`2020Population` - `2010Population`))
-
-smc_pop = smc_pop %>% group_by(cbg) %>% summarize(
-    Absolute_Change_Final = sum(Absolute_Change, na.rm = T)
+Smc_Pop = Smc_Pop_2020 %>% left_join(
+    Smc_Pop_2010,
+    by = "Block"
   )
+
+names(Smc_Pop)[2] = "2020Population"
+names(Smc_Pop)[3] = "2010Population"
+
+Smc_Pop = subset(Smc_Pop, Smc_Pop$
+'2010Population' != 0)
+
+Smc_Pop = Smc_Pop %>% transmute(Block = Block, Percent_Change = round((`2020Population` - `2010Population`)/`2010Population` * 100, 2))
+```
+
+
+```{r, message = FALSE, warning = FALSE}
+# Set up Plot
+
+Smc_Blocks_2020 <- blocks("CA", "San Mateo", year = 2020, progress_bar = F)
+
+Nfo_Boundary <- places("CA", progress_bar = F) %>% 
+  filter(NAME == "North Fair Oaks")
+
+Nfo_Pop_2020 <- Smc_Pop %>% 
+  left_join(Smc_Blocks_2020 %>% select(Block = GEOID20)) %>% 
+  st_as_sf() %>% 
+  st_centroid() %>% 
+  .[Nfo_Boundary, ] %>% 
+  st_set_geometry(NULL) %>% 
+  left_join(Smc_Blocks_2020 %>% select(Block = GEOID20)) %>% 
+  st_as_sf()
 ```
 
 ```{r, message = FALSE, warning = FALSE}
-### Create the Plot
-
-smc_blockgroups <- block_groups("CA", "San Mateo", cb = T, progress_bar = F)
-
-pop_pal <- colorNumeric(
-  palette = "Blues",
-  domain = 
-    smc_pop$Absolute_Change_Final
-)
-
-leaflet() %>% 
-  addProviderTiles(provider = providers$CartoDB.Positron) %>% 
-  addPolygons(
-    data = 
-      smc_pop %>% 
-        left_join(
-          smc_blockgroups %>% select(GEOID), 
-          by = c("cbg" = "GEOID")
-        ) %>% 
-        st_as_sf(),
-    fillColor = ~pop_pal (Absolute_Change_Final),
-    color = "white",
-    opacity = 0.5,
-    fillOpacity = 0.75,
-    weight = 1,
-    label = ~paste0(
-      round(Absolute_Change_Final), 
-      " Absolute Change in Population"
-    ),
-    highlightOptions = highlightOptions(
-      weight = 2,
-      opacity = 1
-    )
-  ) %>% 
-  addLegend(
-    data = smc_pop,
-    pal = pop_pal,
-    values = ~Absolute_Change_Final,
-    title = "Absolute Change in Population"
-  )
+mapview(Nfo_Pop_2020, zcol = "Percent_Change")
 ```
+
+
+```{r, message = FALSE, warning = FALSE}
+PositiveChange = 0
+for (i in 1:nrow(Smc_Pop)) {
+  if (Smc_Pop$Percent_Change[i] >= 0) {
+    PositiveChange = PositiveChange + 1
+  }
+}
+NegativeChange = nrow(Smc_Pop) - PositiveChange
+print(paste0("Blocks with Positive Change: ", PositiveChange))
+print(paste0("Blocks with Negative Change: ", NegativeChange))
+```
+
+### Relection of Findings, Assumptions I Made, Caveats to Be Aware Of
+
+From the plot of North Fair Oaks in San Mateo County and based on the percent change in population, it appears that it is somewhat rare when a population in a certain region grows by over $1000\%$ since most of the regions in the plot are in purple. Furthermore, we counted $2596$ Blocks with Positive Change and $2280$ Blocks with Negative Change, which are both similar numbers. Overall, this suggests that there were more Positive Changes in the Blocks than Negative Changes. However, this is not indicative of overall population growth in North Fair Oaks.
+
+In terms of the assumptions I made in the analysis, I assumed that the population counts in each block were accurately counted. Furthermore, I assumed that after joining the 2010 and 2020 data, the population count was correctly aligned with the block numbers during spatial sub-setting.
+
+Moreover, a caveat that the reader should be aware of is that some of the parts of North Fair Oaks were not recorded in the map for population percent change. This is attributed to how we performed the spatial sub-setting, where some of the information may be lost in the process.
+
+
+
