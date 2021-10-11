@@ -1,0 +1,173 @@
+---
+title: "Assignment 3"
+author: "Rex Shen"
+date: "10/9/2021"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+library(knitr)
+options(warn = -1)
+knitr::opts_chunk$set(echo = FALSE, warnings = FALSE, messages = FALSE)
+opts_chunk$set(tidy.opts = list(width.cutoff = 40), tidy = TRUE)
+```
+
+```{r, include = FALSE}
+# Load Packages
+library(censusapi)
+library(tidyverse)
+library(tigris)
+library(sf)
+library(leaflet)
+
+Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+```
+
+
+
+```{r, include = FALSE}
+Pums_2019_1Yr <- getCensus(
+  name = "acs/acs1/pums",
+  vintage = 2019,
+  region = "public use microdata area:*", 
+  regionin = "state:06",
+  vars = c(
+    "SERIALNO",
+    "WGTP",
+    "ELEP",
+    "RWAT",
+    "SMARTPHONE",
+    "FINCP",
+    "FACCESSP",
+    "FBATHP",
+    "WATP"
+  )
+)
+```
+
+```{r, include = FALSE}
+
+Ca_Pumas <-
+  pumas("CA", cb = T, progress_bar = F)
+
+Bay_County_Names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+Bay_Counties <-
+  counties("CA", cb = T, progress_bar = F) %>%
+  filter(NAME %in% Bay_County_Names)
+
+Bay_Pumas <-
+  Ca_Pumas %>% 
+  st_centroid() %>% 
+  .[Bay_Counties, ] %>% 
+  st_drop_geometry() %>% 
+  left_join(Ca_Pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+
+Bay_Pums <-
+  Pums_2019_1Yr %>% 
+  mutate(
+    PUMA = str_pad(public_use_microdata_area, 5, "left", "0")
+  ) %>% 
+  filter(PUMA %in% Bay_Pumas$PUMACE10)
+```
+
+
+```{r}
+
+Bay_Pums$FINCP = as.numeric(Bay_Pums$FINCP)
+Bay_Pums$ELEP = as.numeric(Bay_Pums$ELEP)
+Bay_Pums$WATP = as.numeric(Bay_Pums$WATP)
+
+Bay_Pums_Example <-
+  Bay_Pums %>% 
+  filter(!duplicated(SERIALNO)) %>% 
+  mutate(
+    WGTP = as.numeric(WGTP),
+    Water = ifelse(
+      (RWAT == 1) & # Hot or Cold Running Water
+        (FINCP <=  mean(FINCP, na.rm = TRUE)) & # Family Income is Less than Mean
+        (ELEP <= mean(ELEP, na.rm = TRUE)) & (SMARTPHONE == 2) & # Monthly 
+        # Electricity Cost is Less Than Mean, No Smartphone
+        (FACCESSP == 0) & (FBATHP == 0) & (WATP <= mean(WATP, na.rm = TRUE)), # No Access
+      # To Internet, No Bathtub or Shower, Water Cost is Less Than Mean
+      WGTP,
+      0
+    )
+  ) %>% 
+  group_by(PUMA) %>% 
+  summarize(
+    PERC_Water =
+      sum(Water, na.rm =T)/sum(WGTP, na.rm = T) * 100, Water_Count = sum(Water, na.rm =T)) %>% 
+  left_join(
+    Bay_Pumas %>% 
+      select(PUMACE10),
+    by = c("PUMA" = "PUMACE10")
+  ) %>% 
+  st_as_sf()
+```
+
+
+
+
+```{r, warnings = FALSE}
+Pums_Pal <- colorNumeric(
+  palette = "Oranges",
+  domain = Bay_Pums_Example$PERC_Water
+)
+
+leaflet() %>%
+  addTiles() %>% 
+  addPolygons(
+    data = Bay_Pums_Example,
+    fillColor = ~Pums_Pal(PERC_Water),
+    color = "white",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1,
+    label = ~paste0(
+      round(PERC_Water), 
+      " % Have Hot/Cold Water Under Given Conditions"
+    ),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      opacity = 1
+    )
+  ) %>% 
+  addLegend(
+    data = Bay_Pums_Example,
+    pal = Pums_Pal,
+    values = ~PERC_Water,
+    title = "% Have Hot/Cold Water Under Given Conditions"
+  )
+```
+
+```{r}
+# Get Total Households with Vulnerability Characteristics
+
+TotalHouseholds = sum(Bay_Pums_Example$Water_Count)
+print(paste0("Total Households With These Vulnerability Characteristics and Have Hot/Cold Water in All of Bay Area: ", TotalHouseholds))
+```
+
+
+### Relection on the Map and Assumptions
+
+In our map, we consider the vulnerability characteristics related to heat waves. Particularly, we consider the percent of households in different PUMA with hot and cold running water but with vulnerability characteristics, such as when family income, electricity costs, and water costs are less than their respective means across different PUMA, no access to Internet, and no shower or bathtub. From the percentages, it seems that there are some regions that are on the low end between 2 - 5 \%, which suggests that with the vulnerability characteristics that there seems to be a lot of households with no running water given the other vulnerability characteristics. Moreover, it seems that there are some regions on the high end with 8 \% near cities like San Francisco and certain regions above SF. Overall, the map suggests that some regions are more vulnerable to heat waves than others given the fact that running water is an essential element to combating them.
+
+\vspace{.05 in}
+
+In terms of general assumptions, we assume that the map is well-representative of the population across the Bay Area. Moreover, we also assume that the measurements are accurately represented, including the total number of households with hot and cold running water and the vulnerability characteristics. Finally, we assume that when we join different datasets, we don't double count.
+
+
+

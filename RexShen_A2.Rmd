@@ -78,10 +78,10 @@ Smc_Pop = Smc_Pop_2020 %>% left_join(
 names(Smc_Pop)[2] = "2020Population"
 names(Smc_Pop)[3] = "2010Population"
 
-Smc_Pop = subset(Smc_Pop, Smc_Pop$
-'2010Population' != 0)
+#Smc_Pop = subset(Smc_Pop, Smc_Pop$
+#'2010Population' != 0)
 
-Smc_Pop = Smc_Pop %>% transmute(Block = Block, Percent_Change = round((`2020Population` - `2010Population`)/`2010Population` * 100, 2))
+Smc_Pop = Smc_Pop %>% transmute(Block = Block, Absolute_Pop = round((`2020Population` - `2010Population`) * 43560, 2))
 ```
 
 
@@ -104,20 +104,20 @@ Nfo_Pop_2020 <- Smc_Pop %>%
 ```
 
 ```{r, message = FALSE, warning = FALSE}
-mapview(Nfo_Pop_2020, zcol = "Percent_Change")
+mapview(Nfo_Pop_2020, zcol = "Absolute_Pop")
 ```
 
 
 ```{r, message = FALSE, warning = FALSE}
-PositiveChange = 0
-for (i in 1:nrow(Smc_Pop)) {
-  if (Smc_Pop$Percent_Change[i] >= 0) {
-    PositiveChange = PositiveChange + 1
-  }
-}
-NegativeChange = nrow(Smc_Pop) - PositiveChange
-print(paste0("Blocks with Positive Change: ", PositiveChange))
-print(paste0("Blocks with Negative Change: ", NegativeChange))
+# PositiveChange = 0
+# for (i in 1:nrow(Smc_Pop)) {
+#  if (Smc_Pop$Percent_Change[i] >= 0) {
+#    PositiveChange = PositiveChange + 1
+#  }
+# }
+# NegativeChange = nrow(Smc_Pop) - PositiveChange
+# print(paste0("Blocks with Positive Change: ", PositiveChange))
+# print(paste0("Blocks with Negative Change: ", NegativeChange))
 ```
 
 ### Relection of Findings, Assumptions I Made, Caveats to Be Aware Of
