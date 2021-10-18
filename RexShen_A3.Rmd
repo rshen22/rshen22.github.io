@@ -20,7 +20,7 @@ library(tigris)
 library(sf)
 library(leaflet)
 
-Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+Sys.setenv(CENSUS_KEY = "c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
 ```
 
 

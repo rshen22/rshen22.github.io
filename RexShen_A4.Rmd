@@ -1,0 +1,268 @@
+---
+title: "Assignment 4"
+author: "Rex Shen"
+date: "10/15/2021"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = F, message = FALSE, warning = FALSE)
+opts_chunk$set(tidy.opts = list(width.cutoff = 40), tidy = TRUE)
+```
+
+
+### Part 1
+
+
+```{r}
+library(tidyverse)
+library(censusapi)
+library(base)
+
+Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+
+acs_vars_2019_5yr <-
+  listCensusMetadata(
+    name = "2019/acs/acs5",
+    type = "variables"
+  )
+```
+
+
+```{r}
+Total_Education_Attainment = NULL
+
+Race = c("White Alone", "Black or African American Alone", "American Indian and Alaska Native Alone", "Asian Alone",  "Native Hawaiian and Other Pacific Islander Alone", "Some Other Race Alone", "Two Or More Races", "White Alone, Not Hispanic or Latino", "Hispanic or Latino")
+
+
+for (i in 1:length(Race)) {
+  
+  Education_Attainment <-
+  getCensus(
+    name = "acs/acs5",
+    vintage = 2019,
+    region = "county:013", # Contra Costa County 
+    regionin = "state:06",
+    vars = paste0("group(C15002", LETTERS[i],")")
+  ) %>%
+  select(!c(GEO_ID,state,NAME) & !ends_with(c("EA","MA","M"))) %>%
+  pivot_longer(
+    ends_with("E"),
+    names_to = "name",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_5yr %>% 
+      select(name, label)
+  ) %>% 
+  select(-name) %>% 
+  separate(
+    label,
+    into = c(NA, NA, NA, "Education_Attainment"),
+    sep = "!!"
+  ) %>% mutate(race = Race[i])
+  
+  Education_Attainment <- Education_Attainment[-c(2, 7), ]
+  Education_Attainment[1, 3] = "Total"
+  
+  Total_Education_Attainment = rbind(Total_Education_Attainment, Education_Attainment)
+}
+```
+
+
+```{r}
+Total_Education_Attainment = Total_Education_Attainment %>% 
+  group_by(Education_Attainment, race) %>% 
+  summarize(estimate = sum(estimate))
+
+Counter = 0
+for (i in 1:36) {
+  
+  if (37 + Counter > nrow(Total_Education_Attainment)) {
+    Counter = 0
+  }
+    Total_Education_Attainment$Proportion[i] =
+      Total_Education_Attainment$estimate[i]/Total_Education_Attainment$estimate[37 + Counter]
+    Counter = Counter + 1
+}
+
+for (i in 37:nrow(Total_Education_Attainment)) {
+  Total_Education_Attainment$Proportion[i] =
+    Total_Education_Attainment$estimate[i]/sum(Total_Education_Attainment$estimate[37:45])
+}
+```
+
+
+
+```{r}
+newPlot = ggplot(data = Total_Education_Attainment) +
+  geom_bar(
+    aes(
+      x = Education_Attainment,
+      y = Proportion,
+      fill = race
+    ),
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    x = "Educational Attainment",
+    y = "Proportion of Population 25 Yrs or Older",
+    title = "Contra Costa County Educational Attainment",
+    fill = "Race"
+  ) + coord_flip() + theme(
+    legend.position = "bottom",
+    legend.direction = "vertical"
+  )  +
+  guides(
+    fill = guide_legend(
+      reverse = T
+    )
+  )
+
+newPlot
+```
+
+
+### Analysis and Observations
+
+Note, the sample plot in the Notes is slightly different from this plot because we included White Alone, Not Hispanic or Latino as well as Hispanic or Latino in our categories, whereas the sample plot excluded them from the plot. Hence, some of the proportions may be slightly different. Moreover, we are looking at Contra Costa County exclusively.
+
+In the plot, we see that "White Alone" and "White Alone, Not Hispanic or Latino" take up a significant proportion of the total numbers. It appears that there is a relative difference in spread among the different races in Less than High School Diploma and Bachelor's Degree or Higher. For instance, if we look at Bachelor's Degree or Higher, "White Alone" and "White Alone, Not Hispanic or Latino" take up around 30\%, "Asian Alone" take up a similar amount, whereas "Native Hawaiian and Other Pacific Islander" comprises of less than 10 \%. Furthermore, we infer similar conclusions for Less Than High School Diploma in terms of disproportionate sub-populations. On the other hand, if we look at Some College or Associate Degree, the spread between races seems relatively even. Overall, there is disproportionate education attainment in Contra Costa County in most of the categories of educational attainment for those 25+.
+
+
+
+### Part 2
+
+In this section, we obtain three categories: "Latinx", "White, Not Latinx", and "Not White, Not Latinx." That is, we perform subtraction to obtain the proportion of "Not White, Not Latinx" using the 2019 1-Yr Data for Contra Costa County for those 25+.
+
+```{r}
+# Get Hispanic or Latino and White Alone, Not Hispanic or Latino and White Alone
+
+Race = c("Hispanic or Latino", "White Alone, Not Hispanic or Latino")
+Letters = c("I", "H")
+  
+Education_Attainment <-
+  getCensus(
+    name = "acs/acs1",
+    vintage = 2019,
+    region = "county:013",
+    regionin = "state:06",
+    vars = c("C15002A_001E", "C15002A_002E", "C15002A_003E", "C15002A_004E", "C15002A_005E",
+             "C15002A_006E", "C15002A_007E", "C15002A_008E", "C15002A_009E", "C15002A_010E",
+             "C15002A_011E", "C15002I_001E", "C15002I_002E", "C15002I_003E", "C15002I_004E", "C15002I_005E","C15002I_006E", "C15002I_007E", "C15002I_008E", "C15002I_009E", "C15002I_010E",
+             "C15002I_011E", "C15002H_001E", "C15002H_002E", "C15002H_003E", "C15002H_004E", "C15002H_005E", "C15002H_006E", "C15002H_007E", "C15002H_008E", "C15002H_009E", "C15002H_010E",
+             "C15002H_011E") 
+  ) %>% select(!c(state)) %>%
+pivot_longer(
+    ends_with("E"),
+    names_to = "name",
+    values_to = "estimate"
+  ) %>%
+  left_join(
+    acs_vars_2019_5yr %>% 
+      select(name, label)
+  )
+
+for (i in 1:nrow(Education_Attainment)) {
+  
+  if (grepl("H", Education_Attainment$name[i])) {
+    Education_Attainment$race[i] = "White Alone, Not Hispanic or Latino"
+  } else if (grepl("I", Education_Attainment$name[i])) {
+    Education_Attainment$race[i] = "Hispanic or Latino"
+  } else {
+    Education_Attainment$race[i] = "White Alone"
+  }
+}
+
+  
+  Education_Attainment <- Education_Attainment[-c(2, 7, 13, 18, 24, 29), ]
+  
+  Education_Attainment = Education_Attainment %>% separate(
+    label,
+    into = c(NA, NA, NA, "Education_Attainment"),
+    sep = "!!"
+  )
+  
+  Education_Attainment = Education_Attainment[, -c(2)]
+  
+  Education_Attainment[1, 3] = "Total"
+  Education_Attainment[10, 3] = "Total"
+  Education_Attainment[19, 3] = "Total"
+  
+  Education_Attainment = Education_Attainment %>% group_by(Education_Attainment, race) %>%
+    summarize(estimate = sum(estimate))
+```
+
+```{r}
+
+Education_Attainment$Proportion = NA
+
+Counter = 0
+for (i in 1:12) {
+  
+  if (13 + Counter > nrow(Education_Attainment)) {
+    Counter = 0
+  }
+  if (Education_Attainment$race[i] != "White Alone") {
+    
+    Education_Attainment$Proportion[i] =
+      Education_Attainment$estimate[i]/Education_Attainment$estimate[13 + Counter]
+    Counter = Counter + 1
+  }
+    
+}
+
+
+for (i in 1:nrow(Education_Attainment)) {
+  
+  if (Education_Attainment$race[i] == "White Alone") {
+    Education_Attainment$Proportion[i] = 1 - Education_Attainment$Proportion[i - 1] - 
+      Education_Attainment$Proportion[i + 1]
+    
+    Education_Attainment$race[i] = "Not White, Not Latinx"
+  }
+  
+}
+
+Education_Attainment = Education_Attainment[-c(13, 14, 15), ]
+```
+
+
+
+```{r}
+# Plot Data
+newPlot = ggplot(data = Education_Attainment) +
+  geom_bar(
+    aes(
+      x = Education_Attainment,
+      y = Proportion,
+      fill = race
+    ),
+    stat = "identity",
+    position = "fill"
+  ) +
+  labs(
+    x = "Educational Attainment",
+    y = "Proportion of Population 25 Yrs or Older",
+    title = "Contra Costa County Educational Attainment",
+    fill = "Ethnicity"
+  ) + coord_flip() + theme(
+    legend.position = "bottom",
+    legend.direction = "vertical"
+  )  +
+  guides(
+    fill = guide_legend(
+      reverse = T
+    )
+  )
+
+newPlot
+
+```
+
+### Analysis and Observations
+
+It appears there is a more apparent disproportionate representation of different sub-populations than before. Particularly, "Hispanic or Latino" consistently has a smaller proportion in the plot. On the other hand, "Not White, Not Latinx" has a greater proportion in the plot. It appears that the spread is more even in the category of "Some College or Associate's Degree," but less so in the other categories. Perhaps, this may suggest that there are some confounding factors at play.
+
