@@ -2,7 +2,9 @@
 title: "Assignment 4"
 author: "Rex Shen"
 date: "10/15/2021"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include = FALSE}
@@ -33,7 +35,7 @@ acs_vars_2019_5yr <-
 ```{r}
 Total_Education_Attainment = NULL
 
-Race = c("White Alone", "Black or African American Alone", "American Indian and Alaska Native Alone", "Asian Alone",  "Native Hawaiian and Other Pacific Islander Alone", "Some Other Race Alone", "Two Or More Races", "White Alone, Not Hispanic or Latino", "Hispanic or Latino")
+Race = c("White Alone", "Black or African American Alone", "American Indian and Alaska Native Alone", "Asian Alone",  "Native Hawaiian and Other Pacific Islander Alone", "Some Other Race Alone", "Two Or More Races")
 
 
 for (i in 1:length(Race)) {
@@ -77,19 +79,19 @@ Total_Education_Attainment = Total_Education_Attainment %>%
   summarize(estimate = sum(estimate))
 
 Counter = 0
-for (i in 1:36) {
+for (i in 1:28) {
   
-  if (37 + Counter > nrow(Total_Education_Attainment)) {
+  if (29 + Counter > nrow(Total_Education_Attainment)) {
     Counter = 0
   }
     Total_Education_Attainment$Proportion[i] =
-      Total_Education_Attainment$estimate[i]/Total_Education_Attainment$estimate[37 + Counter]
+      Total_Education_Attainment$estimate[i]/Total_Education_Attainment$estimate[29 + Counter]
     Counter = Counter + 1
 }
 
-for (i in 37:nrow(Total_Education_Attainment)) {
+for (i in 29:nrow(Total_Education_Attainment)) {
   Total_Education_Attainment$Proportion[i] =
-    Total_Education_Attainment$estimate[i]/sum(Total_Education_Attainment$estimate[37:45])
+    Total_Education_Attainment$estimate[i]/sum(Total_Education_Attainment$estimate[29:35])
 }
 ```
 
@@ -127,11 +129,10 @@ newPlot
 
 ### Analysis and Observations
 
-Note, the sample plot in the Notes is slightly different from this plot because we included White Alone, Not Hispanic or Latino as well as Hispanic or Latino in our categories, whereas the sample plot excluded them from the plot. Hence, some of the proportions may be slightly different. Moreover, we are looking at Contra Costa County exclusively.
-
-In the plot, we see that "White Alone" and "White Alone, Not Hispanic or Latino" take up a significant proportion of the total numbers. It appears that there is a relative difference in spread among the different races in Less than High School Diploma and Bachelor's Degree or Higher. For instance, if we look at Bachelor's Degree or Higher, "White Alone" and "White Alone, Not Hispanic or Latino" take up around 30\%, "Asian Alone" take up a similar amount, whereas "Native Hawaiian and Other Pacific Islander" comprises of less than 10 \%. Furthermore, we infer similar conclusions for Less Than High School Diploma in terms of disproportionate sub-populations. On the other hand, if we look at Some College or Associate Degree, the spread between races seems relatively even. Overall, there is disproportionate education attainment in Contra Costa County in most of the categories of educational attainment for those 25+.
+Note that we are looking at Contra Costa County exclusively.
 
 
+In the plot, we see that "White Alone" takes up a significant proportion of the total numbers. It appears that there is a relative difference in spread among the different races for most of the categories. For instance, in the Bachelor's Degree or Higher, there is more proportion in the "Asian Alone" and "White Alone" than other races, where "Asian Alone" and "White Alone" take roughly the same proportion. Moreover, for Less Than High School Diploma, there is a higher proportion of Some Other Race Alone than other categories. On the other hand, there appears to be a somewhat even spread for Some College or Associate's Degree, whereas there is less even spread in the others. Overall, there is disproportionate education attainment in Contra Costa County in most of the categories of educational attainment for those 25+.
 
 ### Part 2
 
