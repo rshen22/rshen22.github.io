@@ -132,7 +132,7 @@ newPlot
 Note that we are looking at Contra Costa County exclusively.
 
 
-In the plot, we see that "White Alone" takes up a significant proportion of the total numbers. It appears that there is a relative difference in spread among the different races for most of the categories. For instance, in the Bachelor's Degree or Higher, there is more proportion in the "Asian Alone" and "White Alone" than other races, where "Asian Alone" and "White Alone" take roughly the same proportion. Moreover, for Less Than High School Diploma, there is a higher proportion of Some Other Race Alone than other categories. On the other hand, there appears to be a somewhat even spread for Some College or Associate's Degree, whereas there is less even spread in the others. Overall, there is disproportionate education attainment in Contra Costa County in most of the categories of educational attainment for those 25+.
+In the plot, we see that "White Alone" takes up a significant proportion of the total numbers. It appears that there is a relative difference in spread among the different races for most of the categories. For instance, in the Bachelor's Degree or Higher, there is more proportion in the "Asian Alone" and "White Alone" than other races, where "Asian Alone" and "White Alone" take roughly the same proportion. Moreover, for Less Than High School Diploma, there is a higher proportion of "Some Other Race Alone" than other categories. On the other hand, there appears to be a somewhat even spread for Some College or Associate's Degree, whereas there is less even spread in the others. Overall, there is disproportionate education attainment in Contra Costa County in most of the categories of educational attainment for those 25+.
 
 ### Part 2
 
