@@ -1,0 +1,275 @@
+---
+title: "Assignment 5"
+author: "Rex Shen"
+date: "10/21/2021"
+output: html_document
+---
+
+
+
+```{r setup, include = FALSE}
+library(knitr)
+options(warn = -1)
+knitr::opts_chunk$set(echo = FALSE, warnings = FALSE, messages = FALSE)
+opts_chunk$set(tidy.opts = list(width.cutoff = 40), tidy = TRUE)
+```
+
+
+```{r, include = FALSE}
+library(tidyverse)
+library(readxl)
+library(tigris)
+library(sf)
+library(leaflet)
+library(censusapi)
+library(ggplot2)
+```
+
+
+```{r}
+Ces4 <- read_excel("CalEnviro.xlsx")
+```
+
+### Part 1: Maps for PM2.5 and Asthma
+
+```{r}
+Bay_County_Names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+CA_Tracts <- tracts("CA", cb = T, progress_bar = F)
+
+Ces4_Bay_Asthma <-
+  Ces4 %>% 
+  filter(`California County` %in% Bay_County_Names) %>% 
+  select(`Census Tract`, Asthma) %>% 
+  left_join(
+    CA_Tracts %>% 
+      transmute(GEOID = as.numeric(GEOID)), 
+    by = c("Census Tract" = "GEOID")
+  ) %>% 
+  st_as_sf()
+
+Ces4_Bay_Pm25 <-
+  Ces4 %>% 
+  filter(`California County` %in% Bay_County_Names) %>% 
+  select(`Census Tract`, PM2.5) %>% 
+  left_join(
+    CA_Tracts %>% 
+      transmute(GEOID = as.numeric(GEOID)), 
+    by = c("Census Tract" = "GEOID")
+  ) %>% 
+  st_as_sf()
+
+```
+
+```{r}
+
+Pm25_Pal <- colorNumeric(
+  palette = "Reds",
+  domain = Ces4_Bay_Pm25$PM2.5
+)
+
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = Ces4_Bay_Pm25,
+    fillColor = ~Pm25_Pal(PM2.5),
+    color = "white",
+    weight = 0.5,
+    fillOpacity = 0.5,
+    label = ~PM2.5
+  ) %>% 
+  addLegend(
+    data = Ces4_Bay_Pm25,
+    pal = Pm25_Pal,
+    values = ~PM2.5,
+    title = "PM 2.5 (Data Gathered Quarterly from 2012-2014)"
+  )
+```
+
+Note that PM2.5 are very small particles that are $2.5$ micrometers or less in diameter. In terms of the methodology of how the PM2.5 was computed, quarterly means were extracted from the monitors for $2012-2014$, and a mean was calculated by averaging across $2012-2014$. Moreover, a spatial model estimated PM2.5 for each census tract within fifty kilometers of an air monitoring station.
+If further than fifty kilometers, satellite observations were used to assign PM2.5.
+
+It seems the regions near Oakland and Berkeley experience a relatively high concentration of PM2.5. On the other hand, places near San Jose and Sonoma experience a moderate amount compared to Oakland and Berkeley.
+
+
+```{r}
+Ces4_Bay_Asthma = na.omit(Ces4_Bay_Asthma) # Omit NA Entries
+
+Asthma_Pal <- colorNumeric(
+  palette = "Reds",
+  domain = Ces4_Bay_Asthma$Asthma
+)
+
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = Ces4_Bay_Asthma,
+    fillColor = ~Asthma_Pal(Asthma),
+    color = "white",
+    weight = 0.5,
+    fillOpacity = 0.5,
+    label = ~Asthma
+  ) %>% 
+  addLegend(
+    data = Ces4_Bay_Asthma,
+    pal = Asthma_Pal,
+    values = ~Asthma,
+    title = "Asthma Emergency Department Visits Per 10,000 People (2011-2013)"
+  )
+```
+
+Note that the "Asthma" is the \# of Emergency Visits per $10000$ People for Asthma between $2011-2013$.
+
+It looks like regions near and close to Vallejo and Alameda experience a relatively large \# of Emergency Visits per $10000$ People for Asthma. On the other hand, places near San Jose and Palo Alto experience a significantly smaller \# of Emergency Visits per $10000$ People for Asthma.
+
+### Part 2: Scatterplot and Interpretation
+
+
+```{r, echo = FALSE}
+
+Ces4_Bay_Pm25 <-
+  Ces4 %>% 
+  filter(`California County` %in% Bay_County_Names) %>% 
+  select(`Census Tract`, PM2.5) %>% 
+  left_join(
+    CA_Tracts %>% 
+      transmute(GEOID = as.numeric(GEOID)), 
+    by = c("Census Tract" = "GEOID")
+  )
+
+Ces4_Bay_Asthma <-
+  Ces4 %>% 
+  filter(`California County` %in% Bay_County_Names) %>% 
+  select(`Census Tract`, Asthma) %>% 
+  left_join(
+    CA_Tracts %>% 
+      transmute(GEOID = as.numeric(GEOID)), 
+    by = c("Census Tract" = "GEOID")
+  )
+
+MergedData = merge(Ces4_Bay_Asthma, Ces4_Bay_Pm25, by = "Census Tract")
+MergedData = MergedData[, -c(3, 5)]
+
+LM = lm(Asthma ~ PM2.5, data = MergedData)
+
+NewPlot = ggplot(data = MergedData, aes(x = PM2.5, y = Asthma)) + geom_point() + geom_smooth(method = "lm") + ylab("Number of Emergency Visits for Asthma Per 10000 People") + labs(title = "Asthma vs. PM2.5")
+
+NewPlot
+```
+
+From the scatter plot, it appears there is a positive correlation between PM2.5 and Asthma. Note that the best-fit line aligns with this observation since it is a positive slope. Moreover, there appears to be more variation in \# of Emergency Visits per $10000$ People for Asthma when PM2.5 is around $8$ and $9$.
+
+
+
+### Part 3: Summary of Results and Interpretation
+
+```{r}
+summary(LM)
+```
+
+Note, we can interpret the coefficient for PM2.5 as follows. That is, a one unit increase of PM2.5 is associated with an increase of $19.862$ in the \# of Emergency Visits per $10000$ People for Asthma, assuming everything else stays constant. Moreover, we can use the Standard Error to establish a $95\%$ CI for $\beta_{\text{PM2.5}}$. That is, if we perform a sufficiently large number of simulations, we cover the true parameter of $\beta_{\text{PM2.5}}$ $95\%$ of the time. We can also interpret the $R^2$. That is, $9.606\%$ of the variation in the \# of Emergency Visits per $10000$ People for Asthma is explained by the variation in PM2.5.
+
+### Part 4: Non-Log Transformation Residual Plot and Log Transformation Results
+
+```{r}
+plot(density(residuals(LM)), main = "Density of Residuals")
+```
+
+First, let $\epsilon$ indicate the residuals for this particular model. Note that a common assumption of linear regression is that $\epsilon \sim (0, \sigma^2 I_n)$, where $I_n$ is the $n \times n$ Identity. Hence, a problem with this plot is that it appears that it is not centered at $0$. Moreover, it is slightly skewed to the right, whereas a more desirable outcome would to have a more symmetric distribution. Hence, we perform a log transformation below.
+
+```{r, echo = FALSE}
+MergedData$LogAsthma = log(MergedData$Asthma)
+Log_LM = lm(LogAsthma ~ PM2.5, data = MergedData)
+
+
+NewPlot_1 = ggplot(data = MergedData, aes(x = PM2.5, y = LogAsthma)) + geom_point() + geom_smooth(method = "lm") + ylab("Log Number of Emergency Visits for Asthma Per 10000 People") + labs(title = "Log Asthma vs. PM2.5")
+
+NewPlot_1
+```
+
+From the scatter plot, it appears there is still a positive correlation between PM2.5 and Asthma. Moreover, it appears to that the variance is more stabilized than before after performing a log transformation.
+
+```{r}
+summary(Log_LM)
+```
+
+Note, we can interpret the coefficient for PM2.5 as follows. That is, a one unit increase of PM2.5 is associated with $\exp(0.35633) \approx 1.4$ times more with regards to the \# of Emergency Visits per $10000$ People for Asthma, assuming everything else stays constant. We can also interpret the $R^2$. That is, $10.03\%$ of the variation in the Log \# of Emergency Visits per $10000$ People for Asthma is explained by the variation in PM2.5.
+
+### Part 5: Log Transformation Residual Plot and Residual Map
+
+```{r}
+plot(density(residuals(Log_LM)), main = "Density of Residuals")
+```
+
+It now appears that the residuals are relatively close to being centered at $0$. Moreover, it has a more symmetric distribution, which is what we wanted.
+
+```{r}
+Ces4_Bay <-
+  Ces4 %>% 
+  filter(`California County` %in% Bay_County_Names) %>% 
+  select(`Census Tract`, Asthma, PM2.5) %>% 
+  left_join(
+    CA_Tracts %>% 
+      transmute(GEOID = as.numeric(GEOID)), 
+    by = c("Census Tract" = "GEOID")
+  ) %>% 
+  st_as_sf()
+
+Ces4_Bay = na.omit(Ces4_Bay) # Omit NA Entries
+
+LM_Final = lm(Asthma ~ PM2.5, data = Ces4_Bay)
+FinalCes4 = cbind(Ces4_Bay, residuals(LM_Final))
+names(FinalCes4)[4] = "Residuals"
+```
+
+```{r}
+
+Residual_Pal <- colorNumeric(
+  palette = "Reds",
+  domain = FinalCes4$Residuals
+)
+
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = FinalCes4,
+    fillColor = ~Residual_Pal(Residuals),
+    color = "white",
+    weight = 0.5,
+    fillOpacity = 0.5,
+    label = ~Residuals
+  ) %>% 
+  addLegend(
+    data = FinalCes4,
+    pal = Residual_Pal,
+    values = ~Residuals,
+    title = "Residuals for Non-Log Transformation for Asthma"
+  )
+```
+
+
+
+```{r}
+Index = which.min(FinalCes4$Residuals)
+
+FinalCes4 = data.frame(FinalCes4)
+CensusTract = FinalCes4[Index, 1]
+print(paste0("The Census Tract of Interest is: ", CensusTract))
+```
+
+If we look in the CalEnviroScreen Data, the Approximate Location is Oakland (in Alameda County)! As mentioned above, Alameda has a relatively high PM2.5. Now, let $Y \in R^n$ indicate our observed response (i.e. Asthma) and $\hat{f}(X) \in R^d$ indicate our fitted values. Then, a negative residual suggests that
+
+$$Y_{i} -  \hat{f}(X_i) \leq 0 \implies Y_{i}  \leq \hat{f}(X_i).$$
+Hence, a negative residual implies we are over-estimating. Note that there could be many reasons why we over-estimate. First, it may just be the inherent model itself. We may not even be sure if the linear model is necessarily the "best" model to choose from. That is, we could fit using other statistical models, such as polynomial regression. In this case, we could perform further diagnostics by measuring the model's performance using a training and test set. Finally, we could be over-estimating because the other points in the model may be having some "leverage" over other points. For instance, if there are outliers, they may be pulling the least squares line toward a certain direction.
+
