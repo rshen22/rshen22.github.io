@@ -2,7 +2,9 @@
 title: "Assignment 5"
 author: "Rex Shen"
 date: "10/21/2021"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 
@@ -26,7 +28,7 @@ library(ggplot2)
 ```
 
 
-```{r}
+```{r, warning = FALSE}
 Ces4 <- read_excel("CalEnviro.xlsx")
 ```
 
@@ -212,7 +214,7 @@ Note, we can interpret the coefficient for PM2.5 as follows. That is, a one unit
 plot(density(residuals(Log_LM)), main = "Density of Residuals")
 ```
 
-It now appears that the residuals are relatively close to being centered at $0$. Moreover, it has a more symmetric distribution, which is what we wanted.
+It now appears that the residuals are relatively close to being centered at $0$. Moreover, it has a more symmetric distribution, which is what we wanted. Now, we plot the map of the residuals.
 
 ```{r}
 Ces4_Bay <-
@@ -228,48 +230,52 @@ Ces4_Bay <-
 
 Ces4_Bay = na.omit(Ces4_Bay) # Omit NA Entries
 
-LM_Final = lm(Asthma ~ PM2.5, data = Ces4_Bay)
+Ces4_Bay$Log_Asthma = log(Ces4_Bay$Asthma)
+
+LM_Final = lm(Log_Asthma ~ PM2.5, data = Ces4_Bay)
 FinalCes4 = cbind(Ces4_Bay, residuals(LM_Final))
-names(FinalCes4)[4] = "Residuals"
+names(FinalCes4)[5] = "Residuals_of_Log(Asthma)"
 ```
 
 ```{r}
 
 Residual_Pal <- colorNumeric(
   palette = "Reds",
-  domain = FinalCes4$Residuals
+  domain = FinalCes4$`Residuals_of_Log(Asthma)`
 )
 
 leaflet() %>% 
   addProviderTiles(providers$CartoDB.Positron) %>% 
   addPolygons(
     data = FinalCes4,
-    fillColor = ~Residual_Pal(Residuals),
+    fillColor = ~Residual_Pal(`Residuals_of_Log(Asthma)`),
     color = "white",
     weight = 0.5,
     fillOpacity = 0.5,
-    label = ~Residuals
+    label = ~`Residuals_of_Log(Asthma)`
   ) %>% 
   addLegend(
     data = FinalCes4,
     pal = Residual_Pal,
-    values = ~Residuals,
-    title = "Residuals for Non-Log Transformation for Asthma"
+    values = ~`Residuals_of_Log(Asthma)`,
+    title = "Residuals for Log Transformation for Asthma"
   )
 ```
 
 
 
 ```{r}
-Index = which.min(FinalCes4$Residuals)
+Index = which.min(FinalCes4$`Residuals_of_Log(Asthma)`)
 
 FinalCes4 = data.frame(FinalCes4)
 CensusTract = FinalCes4[Index, 1]
 print(paste0("The Census Tract of Interest is: ", CensusTract))
 ```
 
-If we look in the CalEnviroScreen Data, the Approximate Location is Oakland (in Alameda County)! As mentioned above, Alameda has a relatively high PM2.5. Now, let $Y \in R^n$ indicate our observed response (i.e. Asthma) and $\hat{f}(X) \in R^d$ indicate our fitted values. Then, a negative residual suggests that
+
+
+If we look in the CalEnviroScreen Data, the Census Tract $6085513000$'s Approximate Location is Stanford (in Santa Clara County)! Note that Stanford has a relatively high PM2.5 \approx 8.2. Now, let $Y \in R^n$ indicate our observed response (i.e. Log Asthma) and $\hat{f}(X) \in R^d$ indicate our fitted values from the log transformation. Then, a negative residual suggests that
 
 $$Y_{i} -  \hat{f}(X_i) \leq 0 \implies Y_{i}  \leq \hat{f}(X_i).$$
-Hence, a negative residual implies we are over-estimating. Note that there could be many reasons why we over-estimate. First, it may just be the inherent model itself. We may not even be sure if the linear model is necessarily the "best" model to choose from. That is, we could fit using other statistical models, such as polynomial regression. In this case, we could perform further diagnostics by measuring the model's performance using a training and test set. Finally, we could be over-estimating because the other points in the model may be having some "leverage" over other points. For instance, if there are outliers, they may be pulling the least squares line toward a certain direction.
+Hence, a negative residual implies we are over-estimating. Note that there could be many reasons why we over-estimate. First, it may just be the inherent model itself. We may not even be sure if the linear model is necessarily the "best" model to choose from. That is, we could fit using other statistical models, such as polynomial regression. In this case, we could perform further diagnostics by measuring the model's performance using a training and test set. Finally, we could be over-estimating because the other points in the model may have some "leverage" over other points. For instance, if there are outliers, they may be pulling the least squares line toward a certain direction.
 
