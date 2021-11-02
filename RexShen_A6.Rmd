@@ -1,0 +1,172 @@
+---
+title: "Assignment 6"
+author: "Rex Shen"
+date: "10/30/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, messages = FALSE)
+```
+
+
+### Part 1
+
+```{r, warning = FALSE, messages = FALSE, echo = FALSE, include = FALSE}
+# Load Packages
+library(mapview)
+library(censusapi)
+library(tidyverse)
+library(tigris)
+library(sf)
+library(leaflet)
+```
+
+
+```{r, warning = FALSE, messages = FALSE, echo = FALSE, include = FALSE}
+Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+
+Pums_2019_1Yr = getCensus(
+   name = "acs/acs1/pums",
+   vintage = 2019,
+   region = "public use microdata area:*",
+   regionin = "state:06",
+   vars = c(
+     "SERIALNO",
+     "SPORDER",
+     "PWGTP",
+     "WGTP",
+     "YBL",
+     "BLD",
+     "TEN",
+     "MV",
+     "HINCP",
+     "AGEP"
+   )
+ )
+
+CA_Pumas =
+  pumas("CA", cb = T, progress_bar = F)
+
+SF_Boundary =
+  counties("CA", cb = T, progress_bar = F) %>%
+  filter(NAME == "San Francisco")
+
+SF_Pumas =
+  CA_Pumas %>% 
+  st_centroid() %>% 
+  .[SF_Boundary, ] %>% 
+  st_drop_geometry() %>% 
+  left_join(CA_Pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+```
+
+```{r}
+mapview(SF_Pumas)
+```
+
+
+
+```{r}
+SF_Pums =
+  Pums_2019_1Yr %>% 
+  mutate(
+    PUMA = str_pad(public_use_microdata_area, 5, "left", "0")
+  ) %>% 
+  filter(PUMA %in% SF_Pumas$PUMACE10)
+
+
+SF_Pums_Clean = SF_Pums %>% mutate(YBL = as.numeric(YBL), AGEP = as.numeric(AGEP), HINCP = as.numeric(HINCP)) %>%
+  filter(YBL %in% 1:3) %>%
+  arrange(AGEP) %>%
+  group_by(SERIALNO) %>% summarize_all(first) %>% mutate(Leadrisk = ifelse(HINCP < 90000 &
+  AGEP < 6, 1, 0))
+```
+
+
+```{r}
+SF_Pums_Clean = SF_Pums_Clean %>% mutate(
+    BLD = BLD %>% 
+      factor(
+        levels = SF_Pums_Clean$BLD %>% 
+          unique() %>%
+          as.numeric() %>% 
+          sort()
+      )) %>% mutate(
+    TEN = TEN %>% 
+      factor(
+        levels = SF_Pums_Clean$TEN %>% 
+          unique() %>%
+          as.numeric() %>% 
+          sort()
+      )) %>% mutate(MV = MV %>% 
+      factor(
+        levels = SF_Pums_Clean$MV %>% 
+          unique() %>%
+          as.numeric() %>% 
+          sort()
+      ))
+
+SF_Pums_Clean$PUMA = factor(SF_Pums_Clean$PUMA)
+```
+
+
+```{r}
+Logit_Model = glm(
+  Leadrisk ~ BLD + TEN + MV + PUMA,
+  family = quasibinomial(),
+  data = SF_Pums_Clean
+)
+
+summary(Logit_Model)
+```
+
+```{r}
+set.seed(1)
+RandomRow = data.frame(sample_n(SF_Pums_Clean, size = 1))
+print(RandomRow)
+print(as.numeric(predict(Logit_Model, RandomRow, type = "response")))
+```
+
+
+From our random record, we see that the predictor variables BLD, TEN, MV, and PUMA are $3$, $3$, $4$, and $07506$ respectively. Finally, the predicted score is $\approx 0.0815$.
+
+### Part 2
+
+```{r}
+Scores = as.vector(predict(Logit_Model, data.frame(SF_Pums_Clean), type = "response"))
+
+Indices = c()
+for (i in 1:length(Scores)) {
+  if (Scores[i] >= 0.10) {
+    Indices = append(Indices, i)
+  }
+}
+
+Subset = SF_Pums_Clean[Indices, ]
+Subset = Subset[, c("BLD", "TEN", "MV")]
+Summary_2x2 =
+  SF_Pums_Clean %>% 
+  mutate(
+    Leadrisk = ifelse(
+      Leadrisk == 1, 
+      "Risk", 
+      "No Risk"
+    )
+  ) %>% 
+  pull(Leadrisk) %>% 
+  table(Scores >= 0.10)
+
+Summary_2x2
+```
+
+### Analysis/Interpretation
+
+For the scores that exceeded the threshold, the predictor variable BLD was mostly 2, indicating that the units in structure were one family house detached. TEN was mostly 3 and 4, indicating that the housing was rented and occupied without payment or rent respectively. MV was mostly 3 and 4, indicating that when moved into the house or apartment, most of the individuals stayed in for $2-4$ and $5-9$ years respectively.
+
+If we apply this model in real-life, we would expect $27 + 4 = 31$ mail outs based on threshold score, and we expect $\frac{4}{31} * 100 \approx 12.9\%$ to actually go to low income households with children. Moreover, we would expect $\frac{4}{33 + 4} * 100 \approx 10.8\%$ of all at-risk children to be reached.
+
+In terms of ways to improve strategy assuming we don't directly have access to information about incomes and presence of children at the address level, we could use a proxy, such as type of occupation or total number of people (excluding children) in a household. We could also improve our strategy by applying a different model based on what our response is, such as logistic regression.
+
