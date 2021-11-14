@@ -1,0 +1,289 @@
+---
+title: "Assignment 8"
+author: "Rex Shen"
+date: "11/11/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, messages = FALSE)
+```
+
+```{r, warning = FALSE, messages = FALSE, echo = FALSE, include = FALSE}
+# Load Packages
+library(tigris)
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(censusapi)
+library(leaflet)
+library(StatMatch)
+```
+
+### Part 1 (6 Pt)
+
+```{r, warning = FALSE, messages = FALSE, echo = FALSE, include = FALSE}
+Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+
+CA_Pumas <-
+  pumas("CA", cb = T, progress_bar = F)
+
+Bay_County_Names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+Bay_Counties <-
+  counties("CA", cb = T, progress_bar = F) %>%
+  filter(NAME %in% Bay_County_Names)
+
+Bay_Pumas <-
+  CA_Pumas %>% 
+  st_centroid() %>% 
+  .[Bay_Counties, ] %>% 
+  st_drop_geometry() %>% 
+  left_join(CA_Pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+
+```
+
+
+```{r, warning = FALSE, messages = FALSE, echo = FALSE}
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = Bay_Pumas,
+    weight = 1,
+    color = "gray",
+    label = ~PUMACE10
+  ) %>% 
+  addMarkers(
+    lng = -121.8162,
+    lat = 38.0178
+  ) %>% 
+  addPolygons(
+    data = Bay_Pumas %>% 
+      filter(PUMACE10 == "01309")
+  )
+
+```
+
+In the map above, I placed a marker at the location of the Antioch BART Station.
+
+```{r, warning = FALSE, messages = FALSE, echo = FALSE, include = FALSE}
+
+Pums_2014_2019 <- readRDS("Pums_2014_2019_Wts.rds")
+  
+Pums_Bart <- Pums_2014_2019 %>%
+  mutate(
+    PWGTP = as.numeric(PWGTP),
+    bart = ifelse(
+      JWTR %in% c("4"),
+      PWGTP,
+      0
+    )
+  ) %>% 
+  group_by(PUMA, year) %>% 
+  summarize(
+    pop = sum(PWGTP),
+    bart = sum(bart)
+  )
+```
+
+
+As mentioned in $6.2$, we will now examine the distribution of population and BART Commuters in the Bay Area PUMAs, which might give further insights. We will arbitrarily pick $2018$ to view one slice of time.
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+Pums_Pal <- colorNumeric(
+  palette = "YlOrRd",
+  domain = Pums_Bart %>% 
+    filter(year == 2018) %>% 
+    pull(pop)
+)
+
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = Pums_Bart %>% 
+      filter(year == 2018) %>% 
+      right_join(Bay_Pumas %>% select(PUMA = PUMACE10)) %>% 
+      st_as_sf(),
+    fillColor = ~Pums_Pal(pop),
+    color = "white",
+    weight = 1,
+    fillOpacity = 0.5,
+    label = ~paste0(PUMA,": Population ", pop)
+  )
+```
+
+
+
+```{r, warning = FALSE, messages = FALSE, echo = FALSE}
+Pums_Pal <- colorNumeric(
+  palette = "GnBu",
+  domain = Pums_Bart %>% 
+    filter(year == 2018) %>% 
+    pull(bart)
+)
+
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = Pums_Bart %>% 
+      filter(year == 2018) %>% 
+      right_join(Bay_Pumas %>% select(PUMA = PUMACE10)) %>% 
+      st_as_sf(),
+    fillColor = ~Pums_Pal(bart),
+    color = "white",
+    weight = 1,
+    fillOpacity = 0.5,
+    label = ~paste0(PUMA,": ", bart, "BART Commute Riders")
+  )
+
+```
+
+
+```{r}
+Pums_Bart_Clean <-
+  Pums_Bart %>% 
+  select(-pop) %>% 
+  pivot_wider(
+    names_from = year,
+    values_from = bart
+  )
+```
+
+
+```{r, warning = FALSE, messages = FALSE, echo = FALSE, include = FALSE}
+Obs_Matrix <-
+  Pums_Bart_Clean %>% 
+  ungroup() %>% 
+  select('2014','2015','2016', '2017') %>% 
+  as.matrix()
+
+Dist_Matrix <- mahalanobis.dist(Obs_Matrix)
+
+rownames(Dist_Matrix) <- Pums_Bart_Clean$PUMA
+colnames(Dist_Matrix) <- Pums_Bart_Clean$PUMA
+
+Match <- Dist_Matrix["01309",] %>% 
+  as.data.frame() %>% 
+  rownames_to_column() %>% 
+  rename(
+    PUMA = rowname,
+    match = "."
+  ) %>% 
+  right_join(
+    Pums_Bart_Clean
+  ) %>% 
+  arrange(match) %>% 
+  .[1:11, ] %>% 
+  left_join(Bay_Pumas %>% select(PUMA = PUMACE10)) %>% 
+  st_as_sf()
+```
+
+```{r}
+leaflet() %>% 
+  addTiles() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(
+    data = Match[1, ],
+    color = "red",
+    label = ~PUMA
+  ) %>% 
+  addPolygons(
+    data = Match[-1, ],
+    label = ~PUMA
+  )
+```
+
+
+```{r}
+Match_Pumas <-
+  Match %>% 
+  filter(!PUMA %in% c("01309")) %>% 
+  st_drop_geometry() %>% 
+  select(-match) %>% 
+  pivot_longer(
+    -PUMA,
+    names_to = "year",
+    values_to = "bart"
+  ) %>%
+  group_by(
+    year
+  ) %>% 
+  summarize(
+    bart = mean(bart),
+    PUMA = "Similar PUMAs"
+  )
+
+Treatment_Pumas <-
+  Match %>% 
+  filter(PUMA %in% c("01309")) %>% 
+  select(-match) %>% 
+  st_drop_geometry() %>% 
+  pivot_longer(
+    -PUMA,
+    names_to = "year",
+    values_to = "bart"
+  )
+rbind(
+  Treatment_Pumas,
+  Match_Pumas
+) %>% 
+  ggplot(
+    aes(
+      x = as.numeric(year),
+      y = bart,
+      color = PUMA
+    )
+  ) +
+  geom_line() +
+  geom_vline(xintercept = 2018, linetype = "dashed") +
+  labs(
+    title = "Milpitas vs. Control Neighborhoods, BART Ridership",
+    x = "Year",
+    y = "BART Commute Riders"
+  )
+```
+
+
+```{r}
+Transit_Did <-
+  Match %>% 
+  st_drop_geometry() %>% 
+  select(-match) %>% 
+  pivot_longer(
+    -PUMA,
+    names_to = "year",
+    values_to = "bart"
+  ) %>% 
+  mutate(
+    year = year %>% as.numeric(),
+    time = ifelse(year >= 2018, 1, 0),
+    treated = ifelse(PUMA == "01309", 1, 0)
+  )
+
+Did_Reg <- lm(bart ~ treated*time, data = Transit_Did)
+
+summary(Did_Reg)
+```
+
+We make several comments on our results. First, the Antioch BART Station might be diluting our DiD Estimate for Milpitas since one of our matched PUMAs is in the catchmen area of the Antioch BART. Note, if we set an $\alpha = 0.05$, we also see that the DiD Estimate is significant, as the $p$-value is less than $0.05$. We interpret the DiD Estimate as having an estimated impact of about $\approx 1100$ New BART Commuters. In terms of the other terms, they describe "baseline” effects. We cite $6.2$ in the textbook for reference. Particularly, treated represents the pre-treatment difference between treatment and control PUMAs, and time represents the change in the control PUMAs from pre-treatment to post-treatment.
+
+### Part 2 (6.5 Pt)
+
+Note, in general, the assumptions in $6.2$ apply to this example with slight differences. For instance, the Antioch BART Station opened in June $2018$, and PUMS responses could have been sampled from earlier in the year. Moreover, we chose specifically to include two years of post-treatment, but couldn't choose more because of data restrictions.
+
+In terms of similarities, we cite $6.2$ for reference. Note, we chose Bart as the particular outcome to evaluate, which may not be the most important potential causal effect of a BART Station to evaluate. Furthermore, we are assuming that respondents picked “Subway or Elevated Car” in the ACS questionnaire to represent a BART Commute Trip. Additionally, we did not have the cleanest geographies to choose from, so the particular PUMA we chose to consider as “treated” may have been too big to see the relevant effect, which may have been mainly on neighborhoods within biking or walking distance from the station. On the other hand, we may not have picked enough PUMAs, if most riders are driving in from further away. Moreover, the graph measures the average across many PUMAs. Hence, the interpretation of our results needs to be precise, as it might not be completely accurate to say that PUMA $01309$ has more BART Commute Riders than the other PUMAs.
+
