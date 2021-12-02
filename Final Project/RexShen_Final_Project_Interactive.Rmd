@@ -1,0 +1,646 @@
+---
+title: "Final Project in R Shiny"
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    vertical_layout: fill
+---
+```{r global, include = FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(leaflet)
+library(sf)
+library(plotly)
+library(terra)
+library(shiny)
+library(censusapi)
+library(mapview)
+library(devtools)
+library(tigris)
+library(broom)
+library(glmnet)
+
+Sys.setenv(CENSUS_KEY="c8aa67e4086b4b5ce3a8717f59faa9a28f611dab")
+```
+
+```{r}
+# Educational_Attainment = c()
+
+UnemploymentRate = c()
+PercentCollege = c()
+Tot_Housing_Units = c()
+Response = c()
+
+for (i in 3:7) {
+  
+  ### for Maps and Linear Regression Variables
+  UnemploymentRate = append(UnemploymentRate, paste0("CP03_201", i, "_009E")) # Unemployment Rate for Civilian Labor Force
+  PercentCollege = append(PercentCollege, paste0("CP02_201", i, "_067E"))
+  
+   ### for Linear Regression Variables (Solely)
+  
+  Tot_Housing_Units = append(Tot_Housing_Units, paste0("CP04_201", i, "_001E"))
+  Response = append(Response, paste0("CP04_201", i, "_089E"))
+}
+
+Smc_Pop_2013_2017 <-
+  getCensus(
+    name = "acs/acs1/cprofile",
+    vintage = 2017,
+    region = "public use microdata area:*", 
+    regionin = "state:06",
+    vars = c(UnemploymentRate, PercentCollege, Tot_Housing_Units, Response)
+  )
+
+for (i in 1:length(colnames(Smc_Pop_2013_2017))) {
+  
+  if (endsWith(colnames(Smc_Pop_2013_2017)[i], "009E")) {
+    
+    colnames(Smc_Pop_2013_2017)[i] <- paste0("Unemployment_Rate_", substr(colnames(Smc_Pop_2013_2017)[i], 6, 9))
+    
+  } else if (endsWith(colnames(Smc_Pop_2013_2017)[i], "067E")) {
+    
+    colnames(Smc_Pop_2013_2017)[i] <- paste0("Percent_College_", substr(colnames(Smc_Pop_2013_2017)[i], 6, 9))
+    
+  } else if (endsWith(colnames(Smc_Pop_2013_2017)[i], "001E")) {
+    
+    colnames(Smc_Pop_2013_2017)[i] <- paste0("Total_Housing_Units_", substr(colnames(Smc_Pop_2013_2017)[i], 6, 9))
+    
+  } else if (endsWith(colnames(Smc_Pop_2013_2017)[i], "089E")) {
+    
+    colnames(Smc_Pop_2013_2017)[i] <- paste0("Response_", substr(colnames(Smc_Pop_2013_2017)[i], 6, 9))
+    
+  }
+}
+
+### Rename Some Variables
+
+Ca_Pumas <-
+  pumas("CA", cb = T, progress_bar = F)
+
+Bay_County_Names <-
+  c(
+    "Alameda",
+    "Contra Costa",
+    "Marin",
+    "Napa",
+    "San Francisco",
+    "San Mateo",
+    "Santa Clara",
+    "Solano",
+    "Sonoma"
+  )
+
+Bay_Counties <-
+  counties("CA", cb = T, progress_bar = F) %>%
+  filter(NAME %in% Bay_County_Names)
+
+Bay_Pumas <-
+  Ca_Pumas %>% 
+  st_centroid() %>% 
+  .[Bay_Counties, ] %>% 
+  st_drop_geometry() %>% 
+  left_join(Ca_Pumas %>% select(GEOID10)) %>% 
+  st_as_sf()
+
+Bay_Pums <-
+  Smc_Pop_2013_2017 %>% 
+  mutate(
+    PUMA = str_pad(public_use_microdata_area, 5, "left", "0")
+  ) %>% 
+  filter(PUMA %in% Bay_Pumas$PUMACE10)
+
+
+Bay_Pums_Example <-
+  Bay_Pums %>%
+  group_by(PUMA) %>% 
+  left_join(
+    Bay_Pumas %>% 
+      select(PUMACE10),
+    by = c("PUMA" = "PUMACE10")
+  ) %>% 
+  st_as_sf()
+```
+
+Sidebar {.sidebar}
+=====================================
+
+```{r}
+selectInput(
+  inputId = "class", 
+  label = "Class:",
+  choices = c(2013, 2014, 2015, 2016, 2017),
+  selected = 2013
+)
+
+
+selectInput(
+  inputId = "variable", 
+  label = "Variable for Univariate Regression:",
+  choices = c("Unemployment_Rate", "Percent_College", "Total_Housing_Units"),
+  selected = "Unemployment_Rate"
+)
+
+checkboxGroupInput(
+  inputId = "variables",
+  label = "Variables for Multiple Regression:",
+  choices = c("Unemployment_Rate", "Percent_College", "Total_Housing_Units"), selected = "Unemployment_Rate")
+
+```
+
+Map Plots
+=====================================
+
+Column
+-------------------------------------
+
+### Percent Graduated from College
+
+```{r}
+# ------------------------------------- Should Also Do for Total Housing Units in Bay Area
+leafletOutput("mapOne")
+```
+
+```{r, context = "server"}
+observeEvent({
+  input$class
+  }, {
+    
+    Class = as.integer(input$class)
+
+    
+    Pums_Pal <- colorNumeric(
+  palette = "Oranges",
+  domain = eval(parse(text = paste0("Bay_Pums_Example$Percent_College_", Class)))
+)
+
+output$mapOne <- renderLeaflet({ 
+  leaflet() %>%
+    addTiles() %>% 
+    addPolygons(
+      data = Bay_Pums_Example,
+      fillColor = eval(parse(text = paste0("~Pums_Pal(Percent_College_", Class, ")"))),
+      color = "white",
+      opacity = 0.5,
+      fillOpacity = 0.5,
+      weight = 1,
+      label = ~paste0(eval(parse(text = paste0("Percent_College_", Class))), " % Graduated from College or Higher"),
+      highlightOptions = highlightOptions(
+        weight = 2,
+        opacity = 1
+      )
+    ) %>% 
+    addLegend(
+      data = Bay_Pums_Example,
+      pal = Pums_Pal,
+      values = eval(parse(text = paste0("~Percent_College_", Class))),
+      title = paste0("% Graduated from College or Higher (", input$class, ")"),
+      position = "bottomleft"
+    )
+  })
+
+})
+```
+
+Column
+-------------------------------------
+
+### Map of Unemployment
+
+```{r}
+leafletOutput("mapTwo")
+```
+
+
+```{r, context = "server"}
+
+observeEvent({
+  input$class
+  }, {
+    
+    Class = as.integer(input$class)
+    
+    Pums_Pal <- colorNumeric(
+  palette = "Oranges",
+  domain = eval(parse(text = paste0("Bay_Pums_Example$Unemployment_Rate_", Class)))
+)
+
+output$mapTwo <- renderLeaflet({ 
+  leaflet() %>%
+    addTiles() %>% 
+    addPolygons(
+      data = Bay_Pums_Example,
+      fillColor = eval(parse(text = paste0("~Pums_Pal(Unemployment_Rate_", Class, ")"))),
+      color = "white",
+      opacity = 0.5,
+      fillOpacity = 0.5,
+      weight = 1,
+      label = ~paste0(eval(parse(text = paste0("Unemployment_Rate_", Class))), " % Unemployment"),
+      highlightOptions = highlightOptions(
+        weight = 2,
+        opacity = 1
+      )
+    ) %>% 
+    addLegend(
+      data = Bay_Pums_Example,
+      pal = Pums_Pal,
+      values = eval(parse(text = paste0("~Unemployment_Rate_", Class))),
+      title = paste0("% Unemployment (", input$class, ")"),
+      position = "bottomleft"
+    )
+  })
+})
+```
+
+Column
+-------------------------------------
+
+### Map of Total Housing Units
+
+```{r}
+leafletOutput("mapThree")
+```
+
+
+```{r, context = "server"}
+observeEvent({
+  input$class
+  }, {
+    
+    Class = as.integer(input$class)
+    
+    Pums_Pal <- colorNumeric(
+  palette = "Oranges",
+  domain = eval(parse(text = paste0("Bay_Pums_Example$Total_Housing_Units_", Class)))
+)
+
+output$mapThree <- renderLeaflet({ 
+  leaflet() %>%
+    addTiles() %>% 
+    addPolygons(
+      data = Bay_Pums_Example,
+      fillColor = eval(parse(text = paste0("~Pums_Pal(Total_Housing_Units_", Class, ")"))),
+      color = "white",
+      opacity = 0.5,
+      fillOpacity = 0.5,
+      weight = 1,
+      label = ~paste0(eval(parse(text = paste0("Total_Housing_Units_", Class))), " Total Housing Units"),
+      highlightOptions = highlightOptions(
+        weight = 2,
+        opacity = 1
+      )
+    ) %>% 
+    addLegend(
+      data = Bay_Pums_Example,
+      pal = Pums_Pal,
+      values = eval(parse(text = paste0("~Total_Housing_Units_", Class))),
+      title = paste0("Total Housing Units (", input$class, ")"),
+      position = "bottomleft"
+    )
+  })
+})
+```
+
+
+Column
+-------------------------------------
+
+### Sample Correlation for the Three Covariates
+
+```{r}
+# Scatter Plot Correlation Plot
+textOutput("textOne")
+```
+
+```{r, context = "server"}
+observeEvent({
+  input$class
+  }, {
+    
+  
+  Class = as.integer(input$class)
+  
+  ExpressionOne = paste0("The Correlation for Percent College Graduated or Higher and Unemployment Rate in ", Class, " is ", eval(parse(text = paste0("cor(Bay_Pums_Example$Percent_College_", Class, ", Bay_Pums_Example$Unemployment_Rate_", Class, ")"))), ". ", "The Correlation for Percent College Graduated or Higher and Total Housing Units in ", Class, " is ", eval(parse(text = paste0("cor(Bay_Pums_Example$Percent_College_", Class, ", Bay_Pums_Example$Total_Housing_Units_", Class, ")"))), ". ", "The Correlation for Unemployment Rate and Total Housing Units in ", Class, " is ", eval(parse(text = paste0("cor(Bay_Pums_Example$Unemployment_Rate_", Class, ", Bay_Pums_Example$Total_Housing_Units_", Class, ")"))), ".")
+  output$textOne <- renderText(ExpressionOne)
+  
+})
+```
+
+Column
+-------------------------------------
+
+### Map of Median Housing Dollars for Owner Occupied Housing Units
+
+```{r}
+leafletOutput("mapFour")
+```
+
+```{r}
+observeEvent({
+  input$class
+  }, {
+    
+    Class = as.integer(input$class)
+    
+    Pums_Pal <- colorNumeric(
+  palette = "Oranges",
+  domain = eval(parse(text = paste0("Bay_Pums_Example$Response_", Class)))
+)
+
+output$mapFour <- renderLeaflet({ 
+  leaflet() %>%
+    addTiles() %>% 
+    addPolygons(
+      data = Bay_Pums_Example,
+      fillColor = eval(parse(text = paste0("~Pums_Pal(Response_", Class, ")"))),
+      color = "white",
+      opacity = 0.5,
+      fillOpacity = 0.5,
+      weight = 1,
+      label = ~paste0(eval(parse(text = paste0("Response_", Class))), " Median Housing Dollars for Owner-Occupied Housing Units"),
+      highlightOptions = highlightOptions(
+        weight = 2,
+        opacity = 1
+      )
+    ) %>% 
+    addLegend(
+      data = Bay_Pums_Example,
+      pal = Pums_Pal,
+      values = eval(parse(text = paste0("~Response_", Class))),
+      title = paste0("Median Housing Dollars for Owner-Occupied Housing Units (", input$class, ")"),
+      position = "bottomleft"
+    )
+  })
+})
+
+
+```
+
+
+
+Univariate Regression
+=====================================
+
+Column
+-------------------------------------
+
+### Univariate Regression
+
+```{r}
+plotlyOutput("plotOne")
+```
+
+```{r, context = "server"}
+observeEvent({
+  input$class
+  input$variable
+  }, {
+    
+    X_Variable = paste0(input$variable, "_", input$class)
+    Y_Variable = paste0("Response_", input$class)
+    
+    NewPlot = eval(parse(text = paste0("ggplot(data = Bay_Pums_Example, aes(x = ", X_Variable, ", y = ", Y_Variable, ")) + geom_point() + geom_smooth(method = 'lm') + ylab('Median Housing Dollars for ", input$class, "')")))
+    
+    output$plotOne <- renderPlotly({
+      NewPlot
+    })
+})
+
+```
+
+
+
+Column
+-------------------------------------
+
+### Residual Plot
+```{r}
+plotOutput("plotTwo")
+```
+
+```{r}
+observeEvent({
+  input$class
+  input$variable
+  }, {
+    
+    X_Variable = paste0(input$variable, "_", input$class)
+    Y_Variable = paste0("Response_", input$class)
+  
+    LM = eval(parse(text = paste0("lm(", Y_Variable, "~ ", X_Variable, ", data = Bay_Pums_Example)")))
+   
+    output$plotTwo <- renderPlot({
+      plot(density(residuals(LM)), main = "Density of Residuals")
+
+    })
+    
+})
+
+
+
+```
+
+
+
+Column
+-------------------------------------
+
+### Summary Results
+
+```{r}
+verbatimTextOutput("textTwo")
+```
+
+```{r, context = "server"}
+
+observeEvent({
+  input$class
+  input$variable
+  }, {
+    
+    X_Variable = paste0(input$variable, "_", input$class)
+    Y_Variable = paste0("Response_", input$class)
+  
+    LM = eval(parse(text = paste0("lm(", Y_Variable, "~ ", X_Variable, ", data = Bay_Pums_Example)")))
+   
+    output$textTwo <- renderPrint({
+      summary(LM)
+    })
+})
+
+
+```
+
+
+Multiple Regression
+=====================================
+
+
+Column
+-------------------------------------
+
+### Summary Results
+
+```{r}
+verbatimTextOutput("textThree")
+```
+
+```{r, context = "server"}
+
+observeEvent({
+  input$class
+  input$variables
+  }, {
+  
+    LM = NULL
+      
+    if (length(input$variables) == 1) {
+        
+        
+      X_Variable = paste0(input$variables[1], "_", input$class)
+      Y_Variable = paste0("Response_", input$class)
+  
+      LM = eval(parse(text = paste0("lm(", Y_Variable, "~ ", X_Variable, ", data = Bay_Pums_Example)")))
+        
+    } else if (length(input$variables) == 2) {
+        
+      X_Variable_1 = paste0(input$variables[1], "_", input$class)
+      X_Variable_2 = paste0(input$variables[2], "_", input$class)
+      Y_Variable = paste0("Response_", input$class)
+  
+      LM = eval(parse(text = paste0("lm(", Y_Variable, "~ ", X_Variable_1, " + ", X_Variable_2, ", data = Bay_Pums_Example)")))
+        
+    } else if (length(input$variables) == 3) {
+        
+      X_Variable_1 = paste0(input$variables[1], "_", input$class)
+      X_Variable_2 = paste0(input$variables[2], "_", input$class)
+      X_Variable_3 = paste0(input$variables[3], "_", input$class)
+      Y_Variable = paste0("Response_", input$class)
+  
+      LM = eval(parse(text = paste0("lm(", Y_Variable, "~ ", X_Variable_1, " + ", X_Variable_2, " + ", X_Variable_3, ", data = Bay_Pums_Example)")))
+    }
+      
+    output$textThree <- renderPrint({
+    summary(LM)
+    })
+})
+
+
+```
+
+
+
+LASSO for Variable Selection
+=====================================
+
+Column
+-------------------------------------
+
+### Coefficients for LASSO for Training Set
+
+```{r}
+
+verbatimTextOutput("textFour")
+```
+
+
+```{r, context = "server"}
+observeEvent({
+  input$class
+  }, {
+    
+  set.seed(2)
+
+  Smp_Size = floor(0.75 * nrow(Smc_Pop_2013_2017))
+  NewData = Smc_Pop_2013_2017[, -c(1, 2)]
+  
+  Columns_To_Delete = c()
+  
+  for (i in 1:length(colnames(NewData))) {
+    
+    if (!endsWith(colnames(NewData)[i], input$class)) {
+      Columns_To_Delete = append(Columns_To_Delete, i)
+    }
+  }
+  
+  NewData = NewData[, -Columns_To_Delete]
+  
+  
+  train_Index = sample(seq_len(nrow(NewData)), size = Smp_Size)
+  trainData = NewData[train_Index, ]
+  testData = NewData[-train_Index, ]
+  
+  Y_Variable = paste0("Response_", input$class)
+  
+  DataMatrix = eval(parse(text = paste0("model.matrix(", Y_Variable, " ~. -1, data = trainData)")))
+  DataTest = eval(parse(text = paste0("model.matrix(", Y_Variable, " ~. -1, data = testData)")))
+  
+  fitLasso = eval(parse(text = paste0("glmnet(DataMatrix, trainData$", Y_Variable, ", alpha = 1)")))
+  CV = eval(parse(text = paste0("cv.glmnet(DataMatrix, trainData$", Y_Variable, ", alpha = 1)")))
+    
+  BestLambda = CV$lambda.min
+  
+  Coef = coef(CV, s = "lambda.min")
+
+  PredictionResult = predict(fitLasso,  newx = DataTest, s = BestLambda)
+  
+  Expression = paste0("Lasso Regression Test MSE: ", eval(parse(text = paste0("mean((PredictionResult - testData$", Y_Variable, ")^2)") )))
+
+  output$textFour <- renderPrint(Coef)
+    
+})
+
+```
+
+
+Column
+-------------------------------------
+
+### Test MSE for the LASSO
+
+```{r}
+textOutput("textFive")
+```
+
+```{r}
+observeEvent({
+  input$class
+  }, {
+    
+  set.seed(2)
+
+  Smp_Size = floor(0.75 * nrow(Smc_Pop_2013_2017))
+  NewData = Smc_Pop_2013_2017[, -c(1, 2)]
+  
+  Columns_To_Delete = c()
+  
+  for (i in 1:length(colnames(NewData))) {
+    
+    if (!endsWith(colnames(NewData)[i], input$class)) {
+      Columns_To_Delete = append(Columns_To_Delete, i)
+    }
+  }
+  
+  NewData = NewData[, -Columns_To_Delete]
+  
+  train_Index = sample(seq_len(nrow(NewData)), size = Smp_Size)
+  trainData = NewData[train_Index, ]
+  testData = NewData[-train_Index, ]
+  
+  Y_Variable = paste0("Response_", input$class)
+  
+  DataMatrix = eval(parse(text = paste0("model.matrix(", Y_Variable, " ~. -1, data = trainData)")))
+  DataTest = eval(parse(text = paste0("model.matrix(", Y_Variable, " ~. -1, data = testData)")))
+  
+  fitLasso = eval(parse(text = paste0("glmnet(DataMatrix, trainData$", Y_Variable, ", alpha = 1)")))
+  CV = eval(parse(text = paste0("cv.glmnet(DataMatrix, trainData$", Y_Variable, ", alpha = 1)")))
+  BestLambda = CV$lambda.min
+  PredictionResult = predict(fitLasso,  newx = DataTest, s = BestLambda)
+  
+  Expression = paste0("Lasso Regression Test MSE: ", eval(parse(text = paste0("mean((PredictionResult - testData$", Y_Variable, ")^2)") )))
+
+  output$textFive <- renderText(Expression)
+})
+```
+
+
