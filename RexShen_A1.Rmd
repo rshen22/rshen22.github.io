@@ -3,8 +3,8 @@ title: "Assignment 1"
 author: "Rex Shen"
 date: "9/23/2021"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include = FALSE}
@@ -162,15 +162,13 @@ CommercialData = subset(finalData, finalData$CUSTOMERCLASS == "Elec- Commercial"
 
 ```{r}
 ResidentialData = ResidentialData %>% group_by(Date, CUSTOMERCLASS, YEAR) %>% 
-    summarize(TOTALKBTU = max(TOTAL_kBTUs))
+    summarize(TOTALKBTU = sum(TOTAL_kBTUs))
 
 CommercialData = CommercialData %>% group_by(Date, CUSTOMERCLASS, YEAR) %>% 
-    summarize(TOTALKBTU = max(TOTAL_kBTUs))
+    summarize(TOTALKBTU = sum(TOTAL_kBTUs))
 ```
 
 ```{r, message = FALSE, warning = FALSE}
-# Residential
-
 newPlotOne = ggplot(data = ResidentialData, aes(x = Date, y = TOTALKBTU, group = CUSTOMERCLASS)) + geom_line(aes(color = CUSTOMERCLASS)) + labs(
     x = "Date",
     y = "kBTUs",
@@ -195,6 +193,28 @@ newPlotOneCOVID = ggplot(data = COVIDResidential, aes(x = Date, y = TOTALKBTU, g
 newPlotOneCOVID
 ```
 
+In the PG&E Residential Data for $2017$ to $2020$ and $2021 \, Q1$ and $Q2$, we observe an outlier for September $2017$ in that the total kBTUs for the Elec Residential is significantly higher than that of the other months in the time series for the Elec Residential. Perhaps, there was some sort of issue with how the total kBTUs were collected for that particular month. Now, we take a look at $2017$ in more detail.
+
+```{r}
+# Residential COVID Plot
+Non_CovidResidential = subset(ResidentialData, ResidentialData$YEAR == "2017" | ResidentialData$YEAR == "2018")
+
+newPlotOneNon_COVID = ggplot(data = Non_CovidResidential, aes(x = Date, y = TOTALKBTU, group = CUSTOMERCLASS)) + geom_line(aes(color = CUSTOMERCLASS)) + labs(
+    x = "Date",
+    y = "kBTUs",
+    title = "PG&E Residential Data 2017-2018",
+    fill = "Electricity or Gas"
+  ) + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        text = element_text(size = 8))
+
+newPlotOneNon_COVID
+```
+```{r}
+finalData2017_7_Elec = subset(finalData, finalData$YEAR == 2017 & finalData$MONTH == 7 & finalData$CUSTOMERCLASS == "Elec- Residential")
+finalData2017_7_Elec
+```
+
+If we take a look at this "Gorilla Problem," we see that the outlier can be partially attributed to whether or not the Zip Codes were combined or not with other Zip Codes. Perhaps, this may have caused double counting, and, ultimately, higher totals of kBTUs.
 
 
 ```{r, message = FALSE, warning = FALSE}
@@ -223,13 +243,28 @@ newPlotTwoCOVID = ggplot(data = COVIDCommercial, aes(x = Date, y = TOTALKBTU, gr
 newPlotTwoCOVID
 ```
 
+```{r}
+# COVID_Overall = rbind(COVIDCommercial, COVIDResidential)
+# COVID_Overall = subset(COVID_Overall, COVID_Overall$YEAR != "2021")
+
+# COVID_Overall = COVID_Overall %>% group_by(CUSTOMERCLASS)
+
+# newPlotTwoCOVID = ggplot(data = COVID_Overall, aes(x = Months, y = TOTALKBTU, group = CUSTOMERCLASS)) + geom_line(aes(color = CUSTOMERCLASS)) + labs(
+#    x = "Date",
+#    y = "kBTUs",
+#    title = "PG&E Commercial Data 2019-2020 + 2021 Q1 and Q2",
+#    fill = "Electricity or Gas"
+#  ) + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+#        text = element_text(size = 8))
+
+# newPlotTwoCOVID
+
+```
+
+
 ### Summarizing Results & COVID Pandemic Analysis
-
-ANOMALY IN THE DATA
-
-
 
 For both the Residential and Commercial Data between 2019 and 2021, it appears that the kBTU usages for Electricity and Gas are relatively lower starting near April 2020 in comparison to the Residential and Commercial Data in other months. However, the kBTU usage increased and returned to ``normal" levels in late 2020. This may be a reflection of the economy. Particularly, because of the long-lasting impacts of COVID-19, many of the Residences and Commercial Institutions will have initially lost money/resources to pay for electricity and gas, so they may be more stingy. Yet, people wanted to return to normalcy later on in the pandemic, so the economy rebounded as a result.
 
-In terms of the key assumptions made in the analysis and/or caveats we should be aware of, note that the website (\url{https://pge-energydatarequest.com/}) states that the data contains "a minimum of 100 Residential Customers, a minimum of 15 Non-Residential Customers, with no single Non-Residential Customer in each sector accounting for more than $15\%$ of the total consumption. If the aggregation standard is not met, the consumption will be combined with a neighboring ZIP code until the aggregation requirements are met." Thus, it assumes that the if the aggregation standard is not met, the consumption combined with the neighboring ZIP code will have a negligible impact on drawing conclusions from the data. Moreover, we also assume that the data is well-representative of the population, and that the information is accurate, as the KWhs and Therms are accurately measured.
+In terms of the key assumptions made in the analysis and/or caveats we should be aware of, note that the website https://pge-energydatarequest.com/ states that the data contains "a minimum of 100 Residential Customers, a minimum of 15 Non-Residential Customers, with no single Non-Residential Customer in each sector accounting for more than $15\%$ of the total consumption. If the aggregation standard is not met, the consumption will be combined with a neighboring ZIP code until the aggregation requirements are met." Thus, it assumes that the if the aggregation standard is not met, the consumption combined with the neighboring ZIP code will have a negligible impact on drawing conclusions from the data. Moreover, we also assume that the data is well-representative of the population, and that the information is accurate, as the KWhs and Therms are accurately measured.
 
